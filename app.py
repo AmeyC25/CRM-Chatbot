@@ -1,31 +1,26 @@
 import streamlit as st
 import time
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+import os
+import dotenv
+import google.generativeai as genai # Importing genai library
 
-# Load model and tokenizer
-@st.cache_resource
-def load_model():
-    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-    model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-    return tokenizer, model
+# # Load environment variables
+# dotenv.load_dotenv()
+# api_key = os.getenv("GOOGLE_API_KEY")
+api_key = st.secrets["GOOGLE_API_KEY"]
 
-tokenizer, model = load_model()
+# Configure genai with the API key
+genai.configure(api_key=api_key)
 
-# Create a text-generation pipeline
-generator = pipeline("text-generation", model=model, tokenizer=tokenizer)
+# Initialize Gemini model
+model = genai.GenerativeModel('gemini-1.5-flash')
+chat = model.start_chat(history=[])
 
-# Define the QA template
-qa_template = r"""<s>[INST] <<SYS>>
-You are a helpful assistant who is the backend of a prompt-based interface which simplifies CRM (Customer Relationship Management) tasks. Your tasks include creating a marketing campaign for an audience, integrating other services like email to notify, creating reports, etc. Take suitable prompts as Input.
-<</SYS>>
-
-{input_str} [/INST]"""
-
-# Define the SimpleQA function
+# Define the SimpleQA function using Gemini
 def simple_qa(query: str) -> str:
-    prompt = qa_template.format(input_str=query)
-    response = generator(prompt, max_length=500, num_return_sequences=1)
-    return response[0]['generated_text'].split('[/INST]')[-1].strip()
+    # Generate response using the chat model
+    response = chat.send_message(query)
+    return response.text  # Assuming response format contains "text"
 
 # Set up the Streamlit app
 st.set_page_config(page_title="CRM Assistant", page_icon="🤖", layout="wide")
@@ -95,7 +90,6 @@ if prompt := st.chat_input("What can I help you with today?"):
         for chunk in assistant_response.split():
             full_response += chunk + " "
             time.sleep(0.05)
-            # Add a blinking cursor to simulate typing
             message_placeholder.markdown(full_response + "▌")
         message_placeholder.markdown(full_response)
     
