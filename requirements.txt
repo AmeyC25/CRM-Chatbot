@@ -2,4 +2,4 @@ streamlit
 lightrag[ollama]
 streamlit==1.25.0
 requests==2.28.1
-
+pillow
