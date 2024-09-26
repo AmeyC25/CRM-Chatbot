@@ -1,7 +1,7 @@
 import streamlit as st
 import time
 import os
-import dotenv
+
 import google.generativeai as genai # Importing genai library
 
 # # Load environment variables
