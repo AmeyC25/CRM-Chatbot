@@ -1,38 +1,31 @@
 import streamlit as st
-import os
-import subprocess
 import time
-from lightrag.core.generator import Generator
-from lightrag.core.component import Component
-from lightrag.core.model_client import ModelClient
-from lightrag.components.model_client import OllamaClient
+from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 
-# Set up Ollama (you might need to adjust this part depending on your deployment environment)
-def setup_ollama():
-    os.environ['OLLAMA_HOST'] = '0.0.0.0:11434'
-    os.environ['OLLAMA_ORIGINS'] = '*'
-    subprocess.Popen(["ollama", "serve"])
-    time.sleep(10)  # Give Ollama some time to start
+# Load model and tokenizer
+@st.cache_resource
+def load_model():
+    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+    model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+    return tokenizer, model
 
-# Define the SimpleQA component
-class SimpleQA(Component):
-    def __init__(self, model_client: ModelClient, model_kwargs: dict):
-        super().__init__()
-        self.generator = Generator(
-            model_client=model_client,
-            model_kwargs=model_kwargs,
-            template=qa_template,
-        )
+tokenizer, model = load_model()
 
-    def call(self, query: str) -> str:
-        return self.generator.call({"input_str": query})
+# Create a text-generation pipeline
+generator = pipeline("text-generation", model=model, tokenizer=tokenizer)
 
 # Define the QA template
-qa_template = r"""<SYS>
+qa_template = r"""<s>[INST] <<SYS>>
 You are a helpful assistant who is the backend of a prompt-based interface which simplifies CRM (Customer Relationship Management) tasks. Your tasks include creating a marketing campaign for an audience, integrating other services like email to notify, creating reports, etc. Take suitable prompts as Input.
-</SYS>
-User: {{input_str}}
-You:"""
+<</SYS>>
+
+{input_str} [/INST]"""
+
+# Define the SimpleQA function
+def simple_qa(query: str) -> str:
+    prompt = qa_template.format(input_str=query)
+    response = generator(prompt, max_length=500, num_return_sequences=1)
+    return response[0]['generated_text'].split('[/INST]')[-1].strip()
 
 # Set up the Streamlit app
 st.set_page_config(page_title="CRM Assistant", page_icon="🤖", layout="wide")
@@ -92,24 +85,11 @@ if prompt := st.chat_input("What can I help you with today?"):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Set up Ollama and SimpleQA (only do this once)
-    if 'qa' not in st.session_state:
-        setup_ollama()
-        model = {
-            "model_client": OllamaClient(),
-            "model_kwargs": {"model": "llama3.1:8b"}
-        }
-        st.session_state.qa = SimpleQA(**model)
-
     # Generate response
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         full_response = ""
-        assistant_response = st.session_state.qa.call(prompt)
-        
-        # Check if assistant_response is a string, if not, convert it to string
-        if not isinstance(assistant_response, str):
-            assistant_response = str(assistant_response.data)
+        assistant_response = simple_qa(prompt)
         
         # Simulate stream of response with milliseconds delay
         for chunk in assistant_response.split():
